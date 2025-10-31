@@ -1,0 +1,481 @@
+
+
+# ===== Fichier : /Users/martintarot/Documents/Informatique/TrueLink/README.md =====
+
+#Projet entre ami
+
+
+# ===== Fichier : /Users/martintarot/Documents/Informatique/TrueLink/TL_backend/app/__init__.py =====
+
+
+
+# ===== Fichier : /Users/martintarot/Documents/Informatique/TrueLink/TL_backend/app/core/__init__.py =====
+
+
+
+# ===== Fichier : /Users/martintarot/Documents/Informatique/TrueLink/TL_backend/app/core/config.py =====
+
+
+
+# ===== Fichier : /Users/martintarot/Documents/Informatique/TrueLink/TL_backend/app/core/security.py =====
+
+from passlib.context import CryptContext
+from datetime import datetime, timedelta
+from jose import JWTError, jwt
+
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+def hash_password(password: str) -> str:
+    # S'assurer que c’est bien une string simple
+    print(password)
+    password = str(password)
+    
+    return pwd_context.hash(password)
+
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    return pwd_context.verify(plain_password, hashed_password)
+
+
+SECRET_KEY = "super_secret_key_dev"  # à mettre dans .env en prod
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = 60
+
+def create_access_token(data: dict):
+    to_encode = data.copy()
+    expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    to_encode.update({"exp": expire})
+    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    return encoded_jwt
+
+
+# ===== Fichier : /Users/martintarot/Documents/Informatique/TrueLink/TL_backend/app/database.py =====
+
+from sqlmodel import SQLModel, create_engine
+from .models import User  # <- important !$
+
+# URL de la base de données SQLite (fichier local)
+DATABASE_URL = "sqlite:///./dating_app.db"
+
+# Création du moteur SQLAlchemy/SQLModel
+engine = create_engine(DATABASE_URL, echo=True)  # echo=True = logs SQL visibles
+
+# Fonction utilitaire pour créer toutes les tables
+def init_db():
+    SQLModel.metadata.create_all(engine)
+
+
+# ===== Fichier : /Users/martintarot/Documents/Informatique/TrueLink/TL_backend/app/main.py =====
+
+from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+from contextlib import asynccontextmanager
+from .database import init_db
+from .routes import users, auth
+import os
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    init_db()
+    print("✅ Database initialized.")
+    yield
+    print("🛑 Shutting down app...")
+
+app = FastAPI(lifespan=lifespan)
+
+# Inclusion des routes
+app.include_router(users.router)
+app.include_router(auth.router)
+
+# Servir les fichiers statiques
+frontend_path = os.path.join(os.path.dirname(__file__), "..", "..", "TL_frontend")
+app.mount("/static", StaticFiles(directory=frontend_path), name="static")
+
+@app.get("/")
+def read_index():
+    index_file = os.path.join(frontend_path, "index.html")
+    return FileResponse(index_file)
+
+
+
+
+# ===== Fichier : /Users/martintarot/Documents/Informatique/TrueLink/TL_backend/app/models.py =====
+
+from typing import Optional
+from sqlmodel import SQLModel, Field
+from pydantic import BaseModel, EmailStr
+
+class User(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    username: str
+    email: str
+    hashed_password: str
+class UserCreate(BaseModel):
+    username: str
+    email: EmailStr
+    password: str
+
+# ===== Fichier : /Users/martintarot/Documents/Informatique/TrueLink/TL_backend/app/routes/__init__.py =====
+
+
+
+# ===== Fichier : /Users/martintarot/Documents/Informatique/TrueLink/TL_backend/app/routes/auth.py =====
+
+from fastapi import APIRouter, Depends, HTTPException
+from sqlmodel import Session, select
+from ..database import engine
+from ..models import User
+from ..core.security import verify_password, create_access_token
+
+router = APIRouter(prefix="/auth", tags=["auth"])
+
+def get_session():
+    with Session(engine) as session:
+        yield session
+
+@router.post("/login")
+def login(email: str, password: str, session: Session = Depends(get_session)):
+    user = session.exec(select(User).where(User.email == email)).first()
+    if not user or not verify_password(password, user.hashed_password):
+        raise HTTPException(status_code=401, detail="Invalid email or password")
+
+    token = create_access_token({"sub": str(user.id)})
+    return {"access_token": token, "token_type": "bearer", "username": user.username}
+
+
+# ===== Fichier : /Users/martintarot/Documents/Informatique/TrueLink/TL_backend/app/routes/users.py =====
+
+from fastapi import APIRouter, HTTPException, Depends
+from sqlmodel import Session
+from ..database import engine
+from ..models import User, UserCreate
+from ..core.security import hash_password
+from sqlmodel import select
+
+router = APIRouter(prefix="/users", tags=["users"])
+
+def get_session():
+    with Session(engine) as session:
+        yield session
+
+@router.post("/register")
+def register(user_data: UserCreate, session: Session = Depends(get_session)):
+    statement = select(User).where(User.email == user_data.email)
+    existing_user = session.exec(statement).first()
+    if existing_user:
+        raise HTTPException(status_code=400, detail="Email already registered")
+    print("\nLe mot de passe ressemble a ca :",user_data.password)
+    print("\nle type du mdp est :",type(user_data.password))
+    hashed_pw = hash_password(user_data.password)
+    new_user = User(username=user_data.username, email=user_data.email, hashed_password=hashed_pw)
+    session.add(new_user)
+    session.commit()
+    session.refresh(new_user)
+
+    return {"message": "User created successfully", "user_id": new_user.id}
+
+
+# ===== Fichier : /Users/martintarot/Documents/Informatique/TrueLink/TL_frontend/index.html =====
+
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <title>TrueLink - Accueil</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      text-align: center;
+      padding: 50px;
+    }
+    a {
+      display: inline-block;
+      margin-top: 20px;
+      background: #007BFF;
+      color: white;
+      padding: 10px 20px;
+      border-radius: 6px;
+      text-decoration: none;
+    }
+  </style>
+</head>
+<body>
+  <h1>Bienvenue sur TrueLink 💕</h1>
+  <p>API de rencontre minimaliste — version démo</p>
+  <a href="/static/register.html">Créer un compte</a>
+  <a href="/static/login.html">Se connecter</a>
+</body>
+</html>
+
+
+# ===== Fichier : /Users/martintarot/Documents/Informatique/TrueLink/TL_frontend/login.html =====
+
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>Connexion - TrueLink</title>
+  <style>
+    body { font-family: Arial, sans-serif; text-align: center; margin-top: 80px; }
+    form {
+      display: inline-block;
+      background: #f3f3f3;
+      padding: 30px;
+      border-radius: 10px;
+      text-align: left;
+    }
+    input, button {
+      width: 100%;
+      margin: 8px 0;
+      padding: 8px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+    }
+    button {
+      background: #28a745;
+      color: white;
+      border: none;
+    }
+  </style>
+</head>
+<body>
+  <h2>Connexion</h2>
+  <form id="loginForm">
+    <label>Email</label>
+    <input type="email" id="loginEmail" required>
+    <label>Mot de passe</label>
+    <input type="password" id="loginPassword" required>
+    <button type="submit">Se connecter</button>
+  </form>
+
+  <p id="loginMessage"></p>
+
+  <a href="/static/register.html">Créer un compte</a>
+
+  <script src="/static/script.js"></script>
+</body>
+</html>
+
+
+# ===== Fichier : /Users/martintarot/Documents/Informatique/TrueLink/TL_frontend/register.html =====
+
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>Inscription - TrueLink</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      text-align: center;
+      margin-top: 80px;
+    }
+    form {
+      display: inline-block;
+      text-align: left;
+      background: #f3f3f3;
+      padding: 30px;
+      border-radius: 10px;
+    }
+    input, button {
+      width: 100%;
+      margin: 8px 0;
+      padding: 8px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+    }
+    button {
+      background: #007BFF;
+      color: white;
+      border: none;
+    }
+  </style>
+</head>
+<body>
+  <h2>Créer un compte</h2>
+  <form id="registerForm">
+    <label>Nom d’utilisateur</label>
+    <input type="text" id="username" required>
+    <label>Email</label>
+    <input type="email" id="email" required>
+    <label>Mot de passe</label>
+    <input type="password" id="password" required>
+    <button type="submit">S’inscrire</button>
+  </form>
+
+  <p id="message"></p>
+
+  <script src="/static/script.js"></script>
+</body>
+</html>
+
+
+# ===== Fichier : /Users/martintarot/Documents/Informatique/TrueLink/TL_frontend/script.js =====
+
+document.addEventListener("DOMContentLoaded", () => {
+  // === Inscription ===
+  const registerForm = document.getElementById("registerForm");
+  if (registerForm) {
+    registerForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const data = {
+        username: document.getElementById("username").value,
+        email: document.getElementById("email").value,
+        password: document.getElementById("password").value,
+      };
+
+      const res = await fetch("/users/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      });
+
+      const msg = document.getElementById("message");
+      if (res.ok) {
+        const json = await res.json();
+        msg.textContent = `✅ Compte créé avec succès (ID: ${json.user_id})`;
+        msg.style.color = "green";
+      } else {
+        const err = await res.json();
+        msg.textContent = `❌ Erreur : ${err.detail}`;
+        msg.style.color = "red";
+      }
+    });
+  }
+
+  // === Connexion ===
+  const loginForm = document.getElementById("loginForm");
+  if (loginForm) {
+    loginForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const email = document.getElementById("loginEmail").value;
+      const password = document.getElementById("loginPassword").value;
+
+      const params = new URLSearchParams({ email, password });
+      const res = await fetch(`/auth/login?${params.toString()}`, { method: "POST" });
+
+      const msg = document.getElementById("loginMessage");
+      if (res.ok) {
+        const json = await res.json();
+        localStorage.setItem("token", json.access_token);
+        msg.textContent = `✅ Bienvenue ${json.username} !`;
+        msg.style.color = "green";
+      } else {
+        const err = await res.json();
+        msg.textContent = `❌ Erreur : ${err.detail}`;
+        msg.style.color = "red";
+      }
+    });
+  }
+});
+
+
+# ===== Fichier : /Users/martintarot/Documents/Informatique/TrueLink/merge_py_files.py =====
+
+import os
+
+# --- Paramètres ---
+OUTPUT_FILE = "all_text_files_merged.txt"
+INCLUDE_SUBFOLDERS = True  # Mets False si tu veux ignorer les sous-dossiers
+INCLUDED_EXTENSIONS = {".py", ".txt", ".md", ".html", ".js"}
+
+
+def is_hidden(path):
+    """Retourne True si le fichier ou dossier est caché (commence par un point)."""
+    return any(part.startswith('.') for part in path.split(os.sep))
+
+
+def collect_text_files(root_path, include_subfolders=True):
+    text_files = []
+    for root, dirs, files in os.walk(root_path):
+        # On ignore les dossiers cachés
+        dirs[:] = [d for d in dirs if not d.startswith('.')]
+        for file in files:
+            if file.startswith('.'):
+                continue  # Ignore fichiers cachés (.gitignore, etc.)
+            ext = os.path.splitext(file)[1].lower()
+            if ext in INCLUDED_EXTENSIONS:
+                full_path = os.path.join(root, file)
+                if not is_hidden(full_path):
+                    text_files.append(full_path)
+        if not include_subfolders:
+            break
+    return text_files
+
+
+def merge_files(file_list, output_path):
+    with open(output_path, "w", encoding="utf-8") as outfile:
+        for path in sorted(file_list):
+            outfile.write(f"\n\n# ===== Fichier : {path} =====\n\n")
+            try:
+                with open(path, "r", encoding="utf-8") as infile:
+                    outfile.write(infile.read())
+            except Exception as e:
+                outfile.write(f"[Erreur de lecture : {e}]\n")
+
+
+if __name__ == "__main__":
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    output_path = os.path.join(current_dir, OUTPUT_FILE)
+
+    all_files = collect_text_files(current_dir, INCLUDE_SUBFOLDERS)
+
+    # On évite d'inclure le fichier de sortie lui-même
+    all_files = [f for f in all_files if os.path.abspath(f) != os.path.abspath(output_path)]
+
+    merge_files(all_files, output_path)
+    print(f"✅ Fusion terminée ({len(all_files)} fichiers) → {OUTPUT_FILE}")
+
+
+# ===== Fichier : /Users/martintarot/Documents/Informatique/TrueLink/requirements.txt =====
+
+annotated-types==0.7.0
+anyio==4.11.0
+appnope==0.1.4
+asttokens==3.0.0
+bcrypt==5.0.0
+click==8.3.0
+comm==0.2.3
+debugpy==1.8.17
+decorator==5.2.1
+dnspython==2.8.0
+email-validator==2.3.0
+executing==2.2.1
+fastapi==0.119.0
+h11==0.16.0
+idna==3.11
+ipykernel==7.0.1
+ipython==9.6.0
+ipython_pygments_lexers==1.1.1
+jedi==0.19.2
+jupyter_client==8.6.3
+jupyter_core==5.9.1
+matplotlib-inline==0.1.7
+nest-asyncio==1.6.0
+packaging==25.0
+parso==0.8.5
+passlib==1.7.4
+pexpect==4.9.0
+platformdirs==4.5.0
+prompt_toolkit==3.0.52
+psutil==7.1.1
+ptyprocess==0.7.0
+pure_eval==0.2.3
+pydantic==2.12.3
+pydantic_core==2.41.4
+Pygments==2.19.2
+python-dateutil==2.9.0.post0
+pyzmq==27.1.0
+six==1.17.0
+sniffio==1.3.1
+SQLAlchemy==2.0.44
+sqlmodel==0.0.27
+stack-data==0.6.3
+starlette==0.48.0
+tornado==6.5.2
+traitlets==5.14.3
+typing==3.7.4.3
+typing-inspection==0.4.2
+typing_extensions==4.15.0
+uvicorn==0.38.0
+wcwidth==0.2.14
