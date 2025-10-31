@@ -17,8 +17,8 @@ def register(user_data: UserCreate, session: Session = Depends(get_session)):
     existing_user = session.exec(statement).first()
     if existing_user:
         raise HTTPException(status_code=400, detail="Email already registered")
-    print("Le mot de passe ressemble a ca :",user_data.password)
-    print("le type du mdp est :",type(user_data.password))
+    print("\nLe mot de passe ressemble a ca :",user_data.password)
+    print("\nle type du mdp est :",type(user_data.password))
     hashed_pw = hash_password(user_data.password)
     new_user = User(username=user_data.username, email=user_data.email, hashed_password=hashed_pw)
     session.add(new_user)
