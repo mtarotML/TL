@@ -2,28 +2,135 @@
 <html lang="fr">
 <head>
   <meta charset="UTF-8" />
-  <title>TrueLink - Accueil</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TrueLink - Bienvenue</title>
   <style>
-    body {
-      font-family: Arial, sans-serif;
-      text-align: center;
-      padding: 50px;
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
     }
-    a {
-      display: inline-block;
-      margin-top: 20px;
-      background: #007BFF;
+
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    .container {
+      text-align: center;
+      max-width: 500px;
+    }
+
+    .logo {
+      font-size: 80px;
+      margin-bottom: 20px;
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.05); }
+    }
+
+    h1 {
       color: white;
-      padding: 10px 20px;
-      border-radius: 6px;
+      font-size: 42px;
+      margin-bottom: 10px;
+      text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
+    }
+
+    .subtitle {
+      color: rgba(255,255,255,0.9);
+      font-size: 18px;
+      margin-bottom: 40px;
+    }
+
+    .buttons {
+      display: flex;
+      flex-direction: column;
+      gap: 15px;
+      margin-bottom: 30px;
+    }
+
+    .btn {
+      display: inline-block;
+      background: white;
+      color: #667eea;
+      padding: 16px 40px;
+      border-radius: 30px;
       text-decoration: none;
+      font-weight: 600;
+      font-size: 16px;
+      transition: all 0.3s;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+    }
+
+    .btn:hover {
+      transform: translateY(-3px);
+      box-shadow: 0 6px 20px rgba(0,0,0,0.3);
+    }
+
+    .btn.secondary {
+      background: transparent;
+      color: white;
+      border: 2px solid white;
+    }
+
+    .features {
+      display: flex;
+      justify-content: space-around;
+      margin-top: 50px;
+      gap: 20px;
+    }
+
+    .feature {
+      color: white;
+      font-size: 14px;
+    }
+
+    .feature-icon {
+      font-size: 30px;
+      margin-bottom: 8px;
     }
   </style>
 </head>
 <body>
-  <h1>Bienvenue sur TrueLink 💕</h1>
-  <p>API de rencontre minimaliste — version démo</p>
-  <a href="/static/register.html">Créer un compte</a>
-  <a href="/static/login.html">Se connecter</a>
+  <div class="container">
+    <div class="logo">💕</div>
+    <h1>TrueLink</h1>
+    <p class="subtitle">Trouvez votre âme sœur en toute simplicité</p>
+    
+    <div class="buttons">
+      <a href="/static/register.html" class="btn">Créer un compte</a>
+      <a href="/static/login.html" class="btn secondary">Se connecter</a>
+    </div>
+
+    <div class="features">
+      <div class="feature">
+        <div class="feature-icon">🔒</div>
+        <div>Sécurisé</div>
+      </div>
+      <div class="feature">
+        <div class="feature-icon">⚡</div>
+        <div>Rapide</div>
+      </div>
+      <div class="feature">
+        <div class="feature-icon">💬</div>
+        <div>Simple</div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Rediriger si déjà connecté
+    if (localStorage.getItem('token')) {
+      window.location.href = '/static/profile.html';
+    }
+  </script>
 </body>
 </html>

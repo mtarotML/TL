@@ -2,48 +2,245 @@
 <html lang="fr">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Inscription - TrueLink</title>
   <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
     body {
-      font-family: Arial, sans-serif;
-      text-align: center;
-      margin-top: 80px;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
     }
-    form {
-      display: inline-block;
-      text-align: left;
-      background: #f3f3f3;
-      padding: 30px;
-      border-radius: 10px;
-    }
-    input, button {
+
+    .container {
       width: 100%;
-      margin: 8px 0;
-      padding: 8px;
-      border: 1px solid #ccc;
-      border-radius: 4px;
+      max-width: 400px;
     }
+
+    .form-card {
+      background: white;
+      padding: 40px;
+      border-radius: 16px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+    }
+
+    .logo {
+      text-align: center;
+      font-size: 60px;
+      margin-bottom: 20px;
+    }
+
+    h2 {
+      text-align: center;
+      color: #667eea;
+      margin-bottom: 30px;
+      font-size: 28px;
+    }
+
+    .form-group {
+      margin-bottom: 20px;
+    }
+
+    label {
+      display: block;
+      color: #333;
+      font-weight: 600;
+      margin-bottom: 8px;
+      font-size: 14px;
+    }
+
+    input {
+      width: 100%;
+      padding: 12px;
+      border: 2px solid #e1e8ed;
+      border-radius: 8px;
+      font-size: 14px;
+      transition: border-color 0.3s;
+    }
+
+    input:focus {
+      outline: none;
+      border-color: #667eea;
+    }
+
     button {
-      background: #007BFF;
+      width: 100%;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
       color: white;
       border: none;
+      padding: 14px;
+      border-radius: 8px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      margin-top: 10px;
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+
+    button:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+    }
+
+    button:disabled {
+      background: #ccc;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .message {
+      padding: 12px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+      font-size: 14px;
+      display: none;
+    }
+
+    .message.success {
+      background: #d4edda;
+      color: #155724;
+      border: 1px solid #c3e6cb;
+    }
+
+    .message.error {
+      background: #f8d7da;
+      color: #721c24;
+      border: 1px solid #f5c6cb;
+    }
+
+    .link-container {
+      text-align: center;
+      margin-top: 20px;
+      color: #666;
+      font-size: 14px;
+    }
+
+    .link-container a {
+      color: #667eea;
+      text-decoration: none;
+      font-weight: 600;
+    }
+
+    .link-container a:hover {
+      text-decoration: underline;
+    }
+
+    .back-link {
+      text-align: center;
+      margin-top: 15px;
+    }
+
+    .back-link a {
+      color: #999;
+      text-decoration: none;
+      font-size: 13px;
+    }
+
+    .password-strength {
+      font-size: 12px;
+      margin-top: 5px;
+      color: #666;
     }
   </style>
 </head>
 <body>
-  <h2>Créer un compte</h2>
-  <form id="registerForm">
-    <label>Nom d’utilisateur</label>
-    <input type="text" id="username" required>
-    <label>Email</label>
-    <input type="email" id="email" required>
-    <label>Mot de passe</label>
-    <input type="password" id="password" required>
-    <button type="submit">S’inscrire</button>
-  </form>
+  <div class="container">
+    <div class="form-card">
+      <div class="logo">💕</div>
+      <h2>Créer un compte</h2>
+      
+      <div id="message" class="message"></div>
 
-  <p id="message"></p>
+      <form id="registerForm">
+        <div class="form-group">
+          <label for="username">Nom d'utilisateur</label>
+          <input type="text" id="username" placeholder="Alice" required>
+        </div>
 
-  <script src="/static/script.js"></script>
+        <div class="form-group">
+          <label for="email">Email</label>
+          <input type="email" id="email" placeholder="votre@email.com" required>
+        </div>
+
+        <div class="form-group">
+          <label for="password">Mot de passe</label>
+          <input type="password" id="password" placeholder="••••••••" required minlength="6">
+          <div class="password-strength">Minimum 6 caractères</div>
+        </div>
+
+        <button type="submit" id="submitBtn">S'inscrire</button>
+      </form>
+
+      <div class="link-container">
+        Déjà un compte ? <a href="/static/login.html">Se connecter</a>
+      </div>
+
+      <div class="back-link">
+        <a href="/">← Retour à l'accueil</a>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const registerForm = document.getElementById("registerForm");
+    const messageDiv = document.getElementById("message");
+    const submitBtn = document.getElementById("submitBtn");
+
+    registerForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      
+      submitBtn.disabled = true;
+      submitBtn.textContent = "Création en cours...";
+
+      const data = {
+        username: document.getElementById("username").value,
+        email: document.getElementById("email").value,
+        password: document.getElementById("password").value,
+      };
+
+      try {
+        const res = await fetch("/users/register", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(data),
+        });
+
+        const result = await res.json();
+
+        if (res.ok) {
+          messageDiv.textContent = `✅ Compte créé avec succès !`;
+          messageDiv.className = "message success";
+          messageDiv.style.display = "block";
+          
+          registerForm.reset();
+          
+          setTimeout(() => {
+            window.location.href = "/static/login.html";
+          }, 1500);
+        } else {
+          messageDiv.textContent = `❌ ${result.detail}`;
+          messageDiv.className = "message error";
+          messageDiv.style.display = "block";
+          submitBtn.disabled = false;
+          submitBtn.textContent = "S'inscrire";
+        }
+      } catch (error) {
+        messageDiv.textContent = "❌ Erreur de connexion au serveur";
+        messageDiv.className = "message error";
+        messageDiv.style.display = "block";
+        submitBtn.disabled = false;
+        submitBtn.textContent = "S'inscrire";
+      }
+    });
+  </script>
 </body>
 </html>

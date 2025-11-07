@@ -3,7 +3,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from contextlib import asynccontextmanager
 from .database import init_db
-from .routes import users, auth
+from .routes import users, auth, profile
 import os
 from fastapi import Request, HTTPException, Form
 from sqlmodel import Session, select
@@ -23,6 +23,7 @@ app = FastAPI(lifespan=lifespan)
 # Inclusion des routes
 app.include_router(users.router)
 app.include_router(auth.router)
+app.include_router(profile.router)  # ← Nouvelle route
 
 # Servir les fichiers statiques
 frontend_path = os.path.join(os.path.dirname(__file__), "..", "..", "TL_frontend")
@@ -32,14 +33,6 @@ app.mount("/static", StaticFiles(directory=frontend_path), name="static")
 def read_index():
     index_file = os.path.join(frontend_path, "index.html")
     return FileResponse(index_file)
-
-
-
-
-
-
-
-
 
 ADMIN_PASSWORD = "admin"  # ⚠️ À mettre dans .env plus tard
 
@@ -100,4 +93,3 @@ def admin_dashboard(password: str = Form(...)):
         </body>
     </html>
     """
-

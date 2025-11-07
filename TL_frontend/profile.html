@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mon Profil - TrueLink</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      padding: 20px;
+    }
+    
+    .container {
+      max-width: 600px;
+      margin: 0 auto;
+    }
+    
+    .header {
+      background: white;
+      padding: 20px;
+      border-radius: 12px;
+      margin-bottom: 20px;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    
+    .header h1 {
+      font-size: 24px;
+      color: #667eea;
+    }
+    
+    .logout-btn {
+      background: #ff4757;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 14px;
+      transition: background 0.3s;
+    }
+    
+    .logout-btn:hover {
+      background: #ff3838;
+    }
+    
+    .profile-card {
+      background: white;
+      padding: 30px;
+      border-radius: 12px;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    }
+    
+    .profile-form {
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+    
+    .form-group {
+      display: flex;
+      flex-direction: column;
+    }
+    
+    label {
+      font-weight: 600;
+      margin-bottom: 8px;
+      color: #333;
+      font-size: 14px;
+    }
+    
+    input, textarea, select {
+      padding: 12px;
+      border: 2px solid #e1e8ed;
+      border-radius: 8px;
+      font-size: 14px;
+      transition: border-color 0.3s;
+      font-family: inherit;
+    }
+    
+    input:focus, textarea:focus, select:focus {
+      outline: none;
+      border-color: #667eea;
+    }
+    
+    textarea {
+      resize: vertical;
+      min-height: 100px;
+    }
+    
+    .btn-group {
+      display: flex;
+      gap: 10px;
+      margin-top: 10px;
+    }
+    
+    button[type="submit"] {
+      flex: 1;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border: none;
+      padding: 14px;
+      border-radius: 8px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+    
+    button[type="submit"]:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 12px rgba(102, 126, 234, 0.4);
+    }
+    
+    .message {
+      padding: 12px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+      font-size: 14px;
+      font-weight: 500;
+    }
+    
+    .message.success {
+      background: #d4edda;
+      color: #155724;
+      border: 1px solid #c3e6cb;
+    }
+    
+    .message.error {
+      background: #f8d7da;
+      color: #721c24;
+      border: 1px solid #f5c6cb;
+    }
+    
+    .loading {
+      text-align: center;
+      padding: 40px;
+      color: #666;
+    }
+    
+    .profile-view {
+      display: none;
+    }
+    
+    .profile-view.active {
+      display: block;
+    }
+    
+    .info-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 15px 0;
+      border-bottom: 1px solid #e1e8ed;
+    }
+    
+    .info-row:last-child {
+      border-bottom: none;
+    }
+    
+    .info-label {
+      font-weight: 600;
+      color: #666;
+    }
+    
+    .info-value {
+      color: #333;
+      text-align: right;
+      max-width: 60%;
+    }
+    
+    .edit-btn {
+      background: #667eea;
+      color: white;
+      border: none;
+      padding: 12px 24px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 14px;
+      margin-top: 20px;
+      width: 100%;
+      transition: background 0.3s;
+    }
+    
+    .edit-btn:hover {
+      background: #5568d3;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>💕 TrueLink</h1>
+      <button class="logout-btn" onclick="logout()">Déconnexion</button>
+    </div>
+
+    <div class="profile-card">
+      <div id="loading" class="loading">
+        Chargement de votre profil...
+      </div>
+
+      <div id="message"></div>
+
+      <div id="profileView" class="profile-view">
+        <h2 style="margin-bottom: 20px; color: #667eea;">Mon Profil</h2>
+        <div id="profileData"></div>
+        <button class="edit-btn" onclick="toggleEdit()">Modifier mon profil</button>
+      </div>
+
+      <form id="profileForm" class="profile-form" style="display: none;">
+        <h2 style="color: #667eea;" id="formTitle">Créer mon profil</h2>
+        
+        <div class="form-group">
+          <label for="age">Âge</label>
+          <input type="number" id="age" min="18" max="100" required>
+        </div>
+
+        <div class="form-group">
+          <label for="gender">Genre</label>
+          <select id="gender" required>
+            <option value="">-- Sélectionner --</option>
+            <option value="homme">Homme</option>
+            <option value="femme">Femme</option>
+            <option value="autre">Autre</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label for="looking_for">Je recherche</label>
+          <select id="looking_for" required>
+            <option value="">-- Sélectionner --</option>
+            <option value="homme">Des hommes</option>
+            <option value="femme">Des femmes</option>
+            <option value="tous">Peu importe</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label for="city">Ville</label>
+          <input type="text" id="city" placeholder="Paris" required>
+        </div>
+
+        <div class="form-group">
+          <label for="bio">Biographie</label>
+          <textarea id="bio" placeholder="Parlez-nous de vous..." required></textarea>
+        </div>
+
+        <div class="form-group">
+          <label for="photo_url">URL de la photo (optionnel)</label>
+          <input type="url" id="photo_url" placeholder="https://exemple.com/photo.jpg">
+        </div>
+
+        <div class="btn-group">
+          <button type="submit">Enregistrer</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="/static/profile.js"></script>
+</body>
+</html>

@@ -2,7 +2,71 @@
 
 # ===== Fichier : /Users/martintarot/Documents/Informatique/TrueLink/README.md =====
 
-#Projet entre ami
+# TrueLink
+
+Petit projet entre amis pour tester **FastAPI** et **SQLModel**.
+
+---
+
+## 🔧 Fonctionnement global
+
+Le projet est découpé en deux parties :
+
+- **Backend** : FastAPI + SQLModel (API, authentification, base SQLite)  
+- **Frontend** : HTML / JS statique servi directement par FastAPI  
+
+L’API permet :  
+- d’enregistrer un utilisateur,  
+- de se connecter,  
+- et de générer un **token JWT** pour l’authentification.  
+
+---
+
+## 🧰 Script utilitaire : `merge_py_files.py`
+
+Ce script fusionne **tous les fichiers texte du projet** (`.py`, `.html`, `.js`, `.md`, etc.)  
+dans un seul fichier nommé **`all_text_files_merged.txt`**.
+
+💡 *Pratique pour relire le projet complet ou le partager facilement.*
+
+### Utilisation
+```bash
+python merge_py_files.py
+```
+
+---
+
+## 👑 Page admin cachée
+
+Accessible via :  
+```
+/admin
+```
+
+Mot de passe par défaut : `admin`  
+⚠️ *À déplacer dans un `.env` pour un usage en production.*
+
+Cette page affiche une **table HTML des utilisateurs inscrits**,  
+directement tirée de la base de données SQLite.
+
+---
+
+## ⚙️ Lancer le projet
+
+```bash
+cd TL_backend
+pip install -r requirements.txt
+uvicorn app.main:app --reload
+```
+
+Frontend accessible sur :  
+```
+http://127.0.0.1:8000
+```
+
+---
+
+> Projet fun, léger, et prêt à être bricolé 🔧
 
 
 # ===== Fichier : /Users/martintarot/Documents/Informatique/TrueLink/TL_backend/app/__init__.py =====
@@ -22,11 +86,12 @@
 from passlib.context import CryptContext
 from datetime import datetime, timedelta
 from jose import JWTError, jwt
+from typing import Optional
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 def hash_password(password: str) -> str:
-    # S'assurer que c’est bien une string simple
+    # S'assurer que c'est bien une string simple
     print(password)
     password = str(password)
     
@@ -47,6 +112,16 @@ def create_access_token(data: dict):
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
 
+def verify_token(token: str) -> Optional[int]:
+    """Vérifie le token JWT et retourne l'user_id"""
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        user_id = payload.get("sub")
+        if user_id is None:
+            return None
+        return int(user_id)
+    except JWTError:
+        return None
 
 # ===== Fichier : /Users/martintarot/Documents/Informatique/TrueLink/TL_backend/app/database.py =====
 
@@ -71,7 +146,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from contextlib import asynccontextmanager
 from .database import init_db
-from .routes import users, auth
+from .routes import users, auth, profile
 import os
 from fastapi import Request, HTTPException, Form
 from sqlmodel import Session, select
@@ -91,6 +166,7 @@ app = FastAPI(lifespan=lifespan)
 # Inclusion des routes
 app.include_router(users.router)
 app.include_router(auth.router)
+app.include_router(profile.router)  # ← Nouvelle route
 
 # Servir les fichiers statiques
 frontend_path = os.path.join(os.path.dirname(__file__), "..", "..", "TL_frontend")
@@ -100,14 +176,6 @@ app.mount("/static", StaticFiles(directory=frontend_path), name="static")
 def read_index():
     index_file = os.path.join(frontend_path, "index.html")
     return FileResponse(index_file)
-
-
-
-
-
-
-
-
 
 ADMIN_PASSWORD = "admin"  # ⚠️ À mettre dans .env plus tard
 
@@ -169,12 +237,10 @@ def admin_dashboard(password: str = Form(...)):
     </html>
     """
 
-
-
 # ===== Fichier : /Users/martintarot/Documents/Informatique/TrueLink/TL_backend/app/models.py =====
 
 from typing import Optional
-from sqlmodel import SQLModel, Field
+from sqlmodel import SQLModel, Field, Relationship
 from pydantic import BaseModel, EmailStr
 
 class User(SQLModel, table=True):
@@ -182,10 +248,48 @@ class User(SQLModel, table=True):
     username: str
     email: str
     hashed_password: str
+    
+    # Relation avec Profile
+    profile: Optional["Profile"] = Relationship(back_populates="user")
+
 class UserCreate(BaseModel):
     username: str
     email: EmailStr
     password: str
+
+class Profile(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: int = Field(foreign_key="user.id", unique=True)
+    
+    # Informations de profil
+    age: Optional[int] = None
+    bio: Optional[str] = None
+    city: Optional[str] = None
+    photo_url: Optional[str] = None
+    gender: Optional[str] = None  # "homme", "femme", "autre"
+    looking_for: Optional[str] = None  # "homme", "femme", "tous"
+    
+    # Flag pour savoir si le profil est complété
+    is_completed: bool = Field(default=False)
+    
+    # Relation avec User
+    user: Optional[User] = Relationship(back_populates="profile")
+
+class ProfileCreate(BaseModel):
+    age: int
+    bio: str
+    city: str
+    photo_url: Optional[str] = None
+    gender: str
+    looking_for: str
+
+class ProfileUpdate(BaseModel):
+    age: Optional[int] = None
+    bio: Optional[str] = None
+    city: Optional[str] = None
+    photo_url: Optional[str] = None
+    gender: Optional[str] = None
+    looking_for: Optional[str] = None
 
 # ===== Fichier : /Users/martintarot/Documents/Informatique/TrueLink/TL_backend/app/routes/__init__.py =====
 
@@ -193,27 +297,173 @@ class UserCreate(BaseModel):
 
 # ===== Fichier : /Users/martintarot/Documents/Informatique/TrueLink/TL_backend/app/routes/auth.py =====
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Body
 from sqlmodel import Session, select
 from ..database import engine
-from ..models import User
+from ..models import User, Profile
 from ..core.security import verify_password, create_access_token
+from pydantic import BaseModel
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+class LoginRequest(BaseModel):
+    email: str
+    password: str
 
 def get_session():
     with Session(engine) as session:
         yield session
 
 @router.post("/login")
-def login(email: str, password: str, session: Session = Depends(get_session)):
-    user = session.exec(select(User).where(User.email == email)).first()
-    if not user or not verify_password(password, user.hashed_password):
+def login(login_data: LoginRequest = Body(...), session: Session = Depends(get_session)):
+    user = session.exec(select(User).where(User.email == login_data.email)).first()
+    if not user or not verify_password(login_data.password, user.hashed_password):
         raise HTTPException(status_code=401, detail="Invalid email or password")
 
-    token = create_access_token({"sub": str(user.id)})
-    return {"access_token": token, "token_type": "bearer", "username": user.username}
+    # Vérifier si le profil existe et est complété
+    profile = session.exec(select(Profile).where(Profile.user_id == user.id)).first()
+    profile_completed = profile.is_completed if profile else False
 
+    token = create_access_token({"sub": str(user.id)})
+    return {
+        "access_token": token, 
+        "token_type": "bearer", 
+        "username": user.username,
+        "user_id": user.id,
+        "profile_completed": profile_completed
+    }
+
+# ===== Fichier : /Users/martintarot/Documents/Informatique/TrueLink/TL_backend/app/routes/profile.py =====
+
+from fastapi import APIRouter, HTTPException, Depends, Header
+from sqlmodel import Session, select
+from ..database import engine
+from ..models import Profile, ProfileCreate, ProfileUpdate, User
+from ..core.security import verify_token
+from typing import Optional
+
+router = APIRouter(prefix="/profile", tags=["profile"])
+
+def get_session():
+    with Session(engine) as session:
+        yield session
+
+def get_current_user_id(authorization: Optional[str] = Header(None)) -> int:
+    """Extrait l'user_id depuis le token JWT dans le header Authorization"""
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Token manquant ou invalide")
+    
+    token = authorization.replace("Bearer ", "")
+    user_id = verify_token(token)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Token invalide ou expiré")
+    
+    return user_id
+
+@router.get("/me")
+def get_my_profile(
+    user_id: int = Depends(get_current_user_id),
+    session: Session = Depends(get_session)
+):
+    """Récupère le profil de l'utilisateur connecté"""
+    profile = session.exec(
+        select(Profile).where(Profile.user_id == user_id)
+    ).first()
+    
+    if not profile:
+        return {"profile_exists": False, "message": "Profil non créé"}
+    
+    return {
+        "profile_exists": True,
+        "profile": profile
+    }
+
+@router.post("/create")
+def create_profile(
+    profile_data: ProfileCreate,
+    user_id: int = Depends(get_current_user_id),
+    session: Session = Depends(get_session)
+):
+    """Crée le profil de l'utilisateur (première connexion)"""
+    # Vérifier si le profil existe déjà
+    existing_profile = session.exec(
+        select(Profile).where(Profile.user_id == user_id)
+    ).first()
+    
+    if existing_profile:
+        raise HTTPException(status_code=400, detail="Profil déjà existant")
+    
+    # Créer le profil
+    new_profile = Profile(
+        user_id=user_id,
+        age=profile_data.age,
+        bio=profile_data.bio,
+        city=profile_data.city,
+        photo_url=profile_data.photo_url,
+        gender=profile_data.gender,
+        looking_for=profile_data.looking_for,
+        is_completed=True
+    )
+    
+    session.add(new_profile)
+    session.commit()
+    session.refresh(new_profile)
+    
+    return {"message": "Profil créé avec succès", "profile": new_profile}
+
+@router.put("/update")
+def update_profile(
+    profile_data: ProfileUpdate,
+    user_id: int = Depends(get_current_user_id),
+    session: Session = Depends(get_session)
+):
+    """Met à jour le profil de l'utilisateur"""
+    profile = session.exec(
+        select(Profile).where(Profile.user_id == user_id)
+    ).first()
+    
+    if not profile:
+        raise HTTPException(status_code=404, detail="Profil non trouvé")
+    
+    # Mise à jour des champs fournis
+    update_data = profile_data.model_dump(exclude_unset=True)
+    for key, value in update_data.items():
+        setattr(profile, key, value)
+    
+    # Marquer comme complété si au moins les champs de base sont remplis
+    if profile.age and profile.bio and profile.city and profile.gender and profile.looking_for:
+        profile.is_completed = True
+    
+    session.add(profile)
+    session.commit()
+    session.refresh(profile)
+    
+    return {"message": "Profil mis à jour avec succès", "profile": profile}
+
+@router.get("/{user_id}")
+def get_user_profile(
+    user_id: int,
+    current_user_id: int = Depends(get_current_user_id),
+    session: Session = Depends(get_session)
+):
+    """Récupère le profil d'un autre utilisateur (pour le matching plus tard)"""
+    profile = session.exec(
+        select(Profile).where(Profile.user_id == user_id)
+    ).first()
+    
+    if not profile:
+        raise HTTPException(status_code=404, detail="Profil non trouvé")
+    
+    if not profile.is_completed:
+        raise HTTPException(status_code=403, detail="Profil non complété")
+    
+    # Récupérer aussi le username
+    user = session.exec(select(User).where(User.id == user_id)).first()
+    
+    return {
+        "username": user.username if user else None,
+        "profile": profile
+    }
 
 # ===== Fichier : /Users/martintarot/Documents/Informatique/TrueLink/TL_backend/app/routes/users.py =====
 
@@ -253,32 +503,138 @@ def register(user_data: UserCreate, session: Session = Depends(get_session)):
 <html lang="fr">
 <head>
   <meta charset="UTF-8" />
-  <title>TrueLink - Accueil</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TrueLink - Bienvenue</title>
   <style>
-    body {
-      font-family: Arial, sans-serif;
-      text-align: center;
-      padding: 50px;
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
     }
-    a {
-      display: inline-block;
-      margin-top: 20px;
-      background: #007BFF;
+
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    .container {
+      text-align: center;
+      max-width: 500px;
+    }
+
+    .logo {
+      font-size: 80px;
+      margin-bottom: 20px;
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.05); }
+    }
+
+    h1 {
       color: white;
-      padding: 10px 20px;
-      border-radius: 6px;
+      font-size: 42px;
+      margin-bottom: 10px;
+      text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
+    }
+
+    .subtitle {
+      color: rgba(255,255,255,0.9);
+      font-size: 18px;
+      margin-bottom: 40px;
+    }
+
+    .buttons {
+      display: flex;
+      flex-direction: column;
+      gap: 15px;
+      margin-bottom: 30px;
+    }
+
+    .btn {
+      display: inline-block;
+      background: white;
+      color: #667eea;
+      padding: 16px 40px;
+      border-radius: 30px;
       text-decoration: none;
+      font-weight: 600;
+      font-size: 16px;
+      transition: all 0.3s;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+    }
+
+    .btn:hover {
+      transform: translateY(-3px);
+      box-shadow: 0 6px 20px rgba(0,0,0,0.3);
+    }
+
+    .btn.secondary {
+      background: transparent;
+      color: white;
+      border: 2px solid white;
+    }
+
+    .features {
+      display: flex;
+      justify-content: space-around;
+      margin-top: 50px;
+      gap: 20px;
+    }
+
+    .feature {
+      color: white;
+      font-size: 14px;
+    }
+
+    .feature-icon {
+      font-size: 30px;
+      margin-bottom: 8px;
     }
   </style>
 </head>
 <body>
-  <h1>Bienvenue sur TrueLink 💕</h1>
-  <p>API de rencontre minimaliste — version démo</p>
-  <a href="/static/register.html">Créer un compte</a>
-  <a href="/static/login.html">Se connecter</a>
+  <div class="container">
+    <div class="logo">💕</div>
+    <h1>TrueLink</h1>
+    <p class="subtitle">Trouvez votre âme sœur en toute simplicité</p>
+    
+    <div class="buttons">
+      <a href="/static/register.html" class="btn">Créer un compte</a>
+      <a href="/static/login.html" class="btn secondary">Se connecter</a>
+    </div>
+
+    <div class="features">
+      <div class="feature">
+        <div class="feature-icon">🔒</div>
+        <div>Sécurisé</div>
+      </div>
+      <div class="feature">
+        <div class="feature-icon">⚡</div>
+        <div>Rapide</div>
+      </div>
+      <div class="feature">
+        <div class="feature-icon">💬</div>
+        <div>Simple</div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Rediriger si déjà connecté
+    if (localStorage.getItem('token')) {
+      window.location.href = '/static/profile.html';
+    }
+  </script>
 </body>
 </html>
-
 
 # ===== Fichier : /Users/martintarot/Documents/Informatique/TrueLink/TL_frontend/login.html =====
 
@@ -286,48 +642,681 @@ def register(user_data: UserCreate, session: Session = Depends(get_session)):
 <html lang="fr">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Connexion - TrueLink</title>
   <style>
-    body { font-family: Arial, sans-serif; text-align: center; margin-top: 80px; }
-    form {
-      display: inline-block;
-      background: #f3f3f3;
-      padding: 30px;
-      border-radius: 10px;
-      text-align: left;
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
     }
-    input, button {
+
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    .container {
       width: 100%;
-      margin: 8px 0;
-      padding: 8px;
-      border: 1px solid #ccc;
-      border-radius: 4px;
+      max-width: 400px;
     }
+
+    .form-card {
+      background: white;
+      padding: 40px;
+      border-radius: 16px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+    }
+
+    .logo {
+      text-align: center;
+      font-size: 60px;
+      margin-bottom: 20px;
+    }
+
+    h2 {
+      text-align: center;
+      color: #667eea;
+      margin-bottom: 30px;
+      font-size: 28px;
+    }
+
+    .form-group {
+      margin-bottom: 20px;
+    }
+
+    label {
+      display: block;
+      color: #333;
+      font-weight: 600;
+      margin-bottom: 8px;
+      font-size: 14px;
+    }
+
+    input {
+      width: 100%;
+      padding: 12px;
+      border: 2px solid #e1e8ed;
+      border-radius: 8px;
+      font-size: 14px;
+      transition: border-color 0.3s;
+    }
+
+    input:focus {
+      outline: none;
+      border-color: #667eea;
+    }
+
     button {
-      background: #28a745;
+      width: 100%;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
       color: white;
       border: none;
+      padding: 14px;
+      border-radius: 8px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      margin-top: 10px;
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+
+    button:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+    }
+
+    button:disabled {
+      background: #ccc;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .message {
+      padding: 12px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+      font-size: 14px;
+      display: none;
+    }
+
+    .message.success {
+      background: #d4edda;
+      color: #155724;
+      border: 1px solid #c3e6cb;
+    }
+
+    .message.error {
+      background: #f8d7da;
+      color: #721c24;
+      border: 1px solid #f5c6cb;
+    }
+
+    .link-container {
+      text-align: center;
+      margin-top: 20px;
+      color: #666;
+      font-size: 14px;
+    }
+
+    .link-container a {
+      color: #667eea;
+      text-decoration: none;
+      font-weight: 600;
+    }
+
+    .link-container a:hover {
+      text-decoration: underline;
+    }
+
+    .back-link {
+      text-align: center;
+      margin-top: 15px;
+    }
+
+    .back-link a {
+      color: #999;
+      text-decoration: none;
+      font-size: 13px;
     }
   </style>
 </head>
 <body>
-  <h2>Connexion</h2>
-  <form id="loginForm">
-    <label>Email</label>
-    <input type="email" id="loginEmail" required>
-    <label>Mot de passe</label>
-    <input type="password" id="loginPassword" required>
-    <button type="submit">Se connecter</button>
-  </form>
+  <div class="container">
+    <div class="form-card">
+      <div class="logo">💕</div>
+      <h2>Connexion</h2>
+      
+      <div id="loginMessage" class="message"></div>
 
-  <p id="loginMessage"></p>
+      <form id="loginForm">
+        <div class="form-group">
+          <label for="loginEmail">Email</label>
+          <input type="email" id="loginEmail" placeholder="votre@email.com" required>
+        </div>
 
-  <a href="/static/register.html">Créer un compte</a>
+        <div class="form-group">
+          <label for="loginPassword">Mot de passe</label>
+          <input type="password" id="loginPassword" placeholder="••••••••" required>
+        </div>
 
-  <script src="/static/script.js"></script>
+        <button type="submit" id="submitBtn">Se connecter</button>
+      </form>
+
+      <div class="link-container">
+        Pas encore de compte ? <a href="/static/register.html">S'inscrire</a>
+      </div>
+
+      <div class="back-link">
+        <a href="/">← Retour à l'accueil</a>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const loginForm = document.getElementById("loginForm");
+    const messageDiv = document.getElementById("loginMessage");
+    const submitBtn = document.getElementById("submitBtn");
+
+    loginForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      
+      submitBtn.disabled = true;
+      submitBtn.textContent = "Connexion en cours...";
+
+      const email = document.getElementById("loginEmail").value;
+      const password = document.getElementById("loginPassword").value;
+
+      try {
+        const res = await fetch("/auth/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email, password })
+        });
+
+        const data = await res.json();
+
+        if (res.ok) {
+          localStorage.setItem("token", data.access_token);
+          messageDiv.textContent = `✅ Bienvenue ${data.username} !`;
+          messageDiv.className = "message success";
+          messageDiv.style.display = "block";
+
+          setTimeout(() => {
+            window.location.href = "/static/profile.html";
+          }, 1000);
+        } else {
+          messageDiv.textContent = `❌ ${data.detail}`;
+          messageDiv.className = "message error";
+          messageDiv.style.display = "block";
+          submitBtn.disabled = false;
+          submitBtn.textContent = "Se connecter";
+        }
+      } catch (error) {
+        messageDiv.textContent = "❌ Erreur de connexion au serveur";
+        messageDiv.className = "message error";
+        messageDiv.style.display = "block";
+        submitBtn.disabled = false;
+        submitBtn.textContent = "Se connecter";
+      }
+    });
+  </script>
 </body>
 </html>
 
+# ===== Fichier : /Users/martintarot/Documents/Informatique/TrueLink/TL_frontend/profile.html =====
+
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mon Profil - TrueLink</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      padding: 20px;
+    }
+    
+    .container {
+      max-width: 600px;
+      margin: 0 auto;
+    }
+    
+    .header {
+      background: white;
+      padding: 20px;
+      border-radius: 12px;
+      margin-bottom: 20px;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    
+    .header h1 {
+      font-size: 24px;
+      color: #667eea;
+    }
+    
+    .logout-btn {
+      background: #ff4757;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 14px;
+      transition: background 0.3s;
+    }
+    
+    .logout-btn:hover {
+      background: #ff3838;
+    }
+    
+    .profile-card {
+      background: white;
+      padding: 30px;
+      border-radius: 12px;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    }
+    
+    .profile-form {
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+    
+    .form-group {
+      display: flex;
+      flex-direction: column;
+    }
+    
+    label {
+      font-weight: 600;
+      margin-bottom: 8px;
+      color: #333;
+      font-size: 14px;
+    }
+    
+    input, textarea, select {
+      padding: 12px;
+      border: 2px solid #e1e8ed;
+      border-radius: 8px;
+      font-size: 14px;
+      transition: border-color 0.3s;
+      font-family: inherit;
+    }
+    
+    input:focus, textarea:focus, select:focus {
+      outline: none;
+      border-color: #667eea;
+    }
+    
+    textarea {
+      resize: vertical;
+      min-height: 100px;
+    }
+    
+    .btn-group {
+      display: flex;
+      gap: 10px;
+      margin-top: 10px;
+    }
+    
+    button[type="submit"] {
+      flex: 1;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border: none;
+      padding: 14px;
+      border-radius: 8px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+    
+    button[type="submit"]:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 12px rgba(102, 126, 234, 0.4);
+    }
+    
+    .message {
+      padding: 12px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+      font-size: 14px;
+      font-weight: 500;
+    }
+    
+    .message.success {
+      background: #d4edda;
+      color: #155724;
+      border: 1px solid #c3e6cb;
+    }
+    
+    .message.error {
+      background: #f8d7da;
+      color: #721c24;
+      border: 1px solid #f5c6cb;
+    }
+    
+    .loading {
+      text-align: center;
+      padding: 40px;
+      color: #666;
+    }
+    
+    .profile-view {
+      display: none;
+    }
+    
+    .profile-view.active {
+      display: block;
+    }
+    
+    .info-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 15px 0;
+      border-bottom: 1px solid #e1e8ed;
+    }
+    
+    .info-row:last-child {
+      border-bottom: none;
+    }
+    
+    .info-label {
+      font-weight: 600;
+      color: #666;
+    }
+    
+    .info-value {
+      color: #333;
+      text-align: right;
+      max-width: 60%;
+    }
+    
+    .edit-btn {
+      background: #667eea;
+      color: white;
+      border: none;
+      padding: 12px 24px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 14px;
+      margin-top: 20px;
+      width: 100%;
+      transition: background 0.3s;
+    }
+    
+    .edit-btn:hover {
+      background: #5568d3;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>💕 TrueLink</h1>
+      <button class="logout-btn" onclick="logout()">Déconnexion</button>
+    </div>
+
+    <div class="profile-card">
+      <div id="loading" class="loading">
+        Chargement de votre profil...
+      </div>
+
+      <div id="message"></div>
+
+      <div id="profileView" class="profile-view">
+        <h2 style="margin-bottom: 20px; color: #667eea;">Mon Profil</h2>
+        <div id="profileData"></div>
+        <button class="edit-btn" onclick="toggleEdit()">Modifier mon profil</button>
+      </div>
+
+      <form id="profileForm" class="profile-form" style="display: none;">
+        <h2 style="color: #667eea;" id="formTitle">Créer mon profil</h2>
+        
+        <div class="form-group">
+          <label for="age">Âge</label>
+          <input type="number" id="age" min="18" max="100" required>
+        </div>
+
+        <div class="form-group">
+          <label for="gender">Genre</label>
+          <select id="gender" required>
+            <option value="">-- Sélectionner --</option>
+            <option value="homme">Homme</option>
+            <option value="femme">Femme</option>
+            <option value="autre">Autre</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label for="looking_for">Je recherche</label>
+          <select id="looking_for" required>
+            <option value="">-- Sélectionner --</option>
+            <option value="homme">Des hommes</option>
+            <option value="femme">Des femmes</option>
+            <option value="tous">Peu importe</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label for="city">Ville</label>
+          <input type="text" id="city" placeholder="Paris" required>
+        </div>
+
+        <div class="form-group">
+          <label for="bio">Biographie</label>
+          <textarea id="bio" placeholder="Parlez-nous de vous..." required></textarea>
+        </div>
+
+        <div class="form-group">
+          <label for="photo_url">URL de la photo (optionnel)</label>
+          <input type="url" id="photo_url" placeholder="https://exemple.com/photo.jpg">
+        </div>
+
+        <div class="btn-group">
+          <button type="submit">Enregistrer</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="/static/profile.js"></script>
+</body>
+</html>
+
+# ===== Fichier : /Users/martintarot/Documents/Informatique/TrueLink/TL_frontend/profile.js =====
+
+let currentProfile = null;
+let isEditing = false;
+
+document.addEventListener("DOMContentLoaded", async () => {
+  const token = localStorage.getItem("token");
+  if (!token) {
+    window.location.href = "/static/login.html";
+    return;
+  }
+
+  await loadProfile();
+
+  document.getElementById("profileForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    await saveProfile();
+  });
+});
+
+async function loadProfile() {
+  const token = localStorage.getItem("token");
+  const loading = document.getElementById("loading");
+
+  try {
+    const res = await fetch("/profile/me", {
+      headers: { "Authorization": `Bearer ${token}` }
+    });
+
+    if (res.status === 401) {
+      localStorage.removeItem("token");
+      window.location.href = "/static/login.html";
+      return;
+    }
+
+    const data = await res.json();
+
+    loading.style.display = "none";
+
+    if (data.profile_exists) {
+      currentProfile = data.profile;
+      showProfileView();
+    } else {
+      document.getElementById("profileForm").style.display = "flex";
+      document.getElementById("formTitle").textContent = "Créer mon profil";
+    }
+  } catch (error) {
+    loading.style.display = "none";
+    showMessage("Erreur lors du chargement du profil", "error");
+  }
+}
+
+function showProfileView() {
+  const profileView = document.getElementById("profileView");
+  const profileData = document.getElementById("profileData");
+  
+  const genderLabels = {
+    "homme": "Homme",
+    "femme": "Femme",
+    "autre": "Autre"
+  };
+  
+  const lookingForLabels = {
+    "homme": "Des hommes",
+    "femme": "Des femmes",
+    "tous": "Peu importe"
+  };
+
+  profileData.innerHTML = `
+    <div class="info-row">
+      <span class="info-label">Âge</span>
+      <span class="info-value">${currentProfile.age} ans</span>
+    </div>
+    <div class="info-row">
+      <span class="info-label">Genre</span>
+      <span class="info-value">${genderLabels[currentProfile.gender] || currentProfile.gender}</span>
+    </div>
+    <div class="info-row">
+      <span class="info-label">Recherche</span>
+      <span class="info-value">${lookingForLabels[currentProfile.looking_for] || currentProfile.looking_for}</span>
+    </div>
+    <div class="info-row">
+      <span class="info-label">Ville</span>
+      <span class="info-value">${currentProfile.city}</span>
+    </div>
+    <div class="info-row">
+      <span class="info-label">Biographie</span>
+      <span class="info-value">${currentProfile.bio}</span>
+    </div>
+    ${currentProfile.photo_url ? `
+    <div class="info-row">
+      <span class="info-label">Photo</span>
+      <span class="info-value"><a href="${currentProfile.photo_url}" target="_blank" style="color: #667eea;">Voir la photo</a></span>
+    </div>
+    ` : ''}
+  `;
+
+  profileView.classList.add("active");
+  document.getElementById("profileForm").style.display = "none";
+}
+
+function toggleEdit() {
+  const profileView = document.getElementById("profileView");
+  const profileForm = document.getElementById("profileForm");
+  const formTitle = document.getElementById("formTitle");
+
+  profileView.classList.remove("active");
+  profileForm.style.display = "flex";
+  formTitle.textContent = "Modifier mon profil";
+  isEditing = true;
+
+  document.getElementById("age").value = currentProfile.age;
+  document.getElementById("gender").value = currentProfile.gender;
+  document.getElementById("looking_for").value = currentProfile.looking_for;
+  document.getElementById("city").value = currentProfile.city;
+  document.getElementById("bio").value = currentProfile.bio;
+  document.getElementById("photo_url").value = currentProfile.photo_url || "";
+}
+
+async function saveProfile() {
+  const token = localStorage.getItem("token");
+  const messageDiv = document.getElementById("message");
+
+  const profileData = {
+    age: parseInt(document.getElementById("age").value),
+    gender: document.getElementById("gender").value,
+    looking_for: document.getElementById("looking_for").value,
+    city: document.getElementById("city").value,
+    bio: document.getElementById("bio").value,
+    photo_url: document.getElementById("photo_url").value || null
+  };
+
+  try {
+    const endpoint = isEditing ? "/profile/update" : "/profile/create";
+    const method = isEditing ? "PUT" : "POST";
+
+    const res = await fetch(endpoint, {
+      method: method,
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${token}`
+      },
+      body: JSON.stringify(profileData)
+    });
+
+    const data = await res.json();
+
+    if (res.ok) {
+      showMessage(data.message, "success");
+      currentProfile = data.profile;
+      isEditing = false;
+      setTimeout(() => {
+        showProfileView();
+        messageDiv.innerHTML = "";
+      }, 1500);
+    } else {
+      showMessage(`Erreur : ${data.detail}`, "error");
+    }
+  } catch (error) {
+    showMessage("Erreur lors de l'enregistrement", "error");
+  }
+}
+
+function showMessage(text, type) {
+  const messageDiv = document.getElementById("message");
+  messageDiv.textContent = text;
+  messageDiv.className = `message ${type}`;
+  messageDiv.style.display = "block";
+}
+
+function logout() {
+  localStorage.removeItem("token");
+  window.location.href = "/";
+}
 
 # ===== Fichier : /Users/martintarot/Documents/Informatique/TrueLink/TL_frontend/register.html =====
 
@@ -335,52 +1324,248 @@ def register(user_data: UserCreate, session: Session = Depends(get_session)):
 <html lang="fr">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Inscription - TrueLink</title>
   <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
     body {
-      font-family: Arial, sans-serif;
-      text-align: center;
-      margin-top: 80px;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
     }
-    form {
-      display: inline-block;
-      text-align: left;
-      background: #f3f3f3;
-      padding: 30px;
-      border-radius: 10px;
-    }
-    input, button {
+
+    .container {
       width: 100%;
-      margin: 8px 0;
-      padding: 8px;
-      border: 1px solid #ccc;
-      border-radius: 4px;
+      max-width: 400px;
     }
+
+    .form-card {
+      background: white;
+      padding: 40px;
+      border-radius: 16px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+    }
+
+    .logo {
+      text-align: center;
+      font-size: 60px;
+      margin-bottom: 20px;
+    }
+
+    h2 {
+      text-align: center;
+      color: #667eea;
+      margin-bottom: 30px;
+      font-size: 28px;
+    }
+
+    .form-group {
+      margin-bottom: 20px;
+    }
+
+    label {
+      display: block;
+      color: #333;
+      font-weight: 600;
+      margin-bottom: 8px;
+      font-size: 14px;
+    }
+
+    input {
+      width: 100%;
+      padding: 12px;
+      border: 2px solid #e1e8ed;
+      border-radius: 8px;
+      font-size: 14px;
+      transition: border-color 0.3s;
+    }
+
+    input:focus {
+      outline: none;
+      border-color: #667eea;
+    }
+
     button {
-      background: #007BFF;
+      width: 100%;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
       color: white;
       border: none;
+      padding: 14px;
+      border-radius: 8px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      margin-top: 10px;
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+
+    button:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+    }
+
+    button:disabled {
+      background: #ccc;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .message {
+      padding: 12px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+      font-size: 14px;
+      display: none;
+    }
+
+    .message.success {
+      background: #d4edda;
+      color: #155724;
+      border: 1px solid #c3e6cb;
+    }
+
+    .message.error {
+      background: #f8d7da;
+      color: #721c24;
+      border: 1px solid #f5c6cb;
+    }
+
+    .link-container {
+      text-align: center;
+      margin-top: 20px;
+      color: #666;
+      font-size: 14px;
+    }
+
+    .link-container a {
+      color: #667eea;
+      text-decoration: none;
+      font-weight: 600;
+    }
+
+    .link-container a:hover {
+      text-decoration: underline;
+    }
+
+    .back-link {
+      text-align: center;
+      margin-top: 15px;
+    }
+
+    .back-link a {
+      color: #999;
+      text-decoration: none;
+      font-size: 13px;
+    }
+
+    .password-strength {
+      font-size: 12px;
+      margin-top: 5px;
+      color: #666;
     }
   </style>
 </head>
 <body>
-  <h2>Créer un compte</h2>
-  <form id="registerForm">
-    <label>Nom d’utilisateur</label>
-    <input type="text" id="username" required>
-    <label>Email</label>
-    <input type="email" id="email" required>
-    <label>Mot de passe</label>
-    <input type="password" id="password" required>
-    <button type="submit">S’inscrire</button>
-  </form>
+  <div class="container">
+    <div class="form-card">
+      <div class="logo">💕</div>
+      <h2>Créer un compte</h2>
+      
+      <div id="message" class="message"></div>
 
-  <p id="message"></p>
+      <form id="registerForm">
+        <div class="form-group">
+          <label for="username">Nom d'utilisateur</label>
+          <input type="text" id="username" placeholder="Alice" required>
+        </div>
 
-  <script src="/static/script.js"></script>
+        <div class="form-group">
+          <label for="email">Email</label>
+          <input type="email" id="email" placeholder="votre@email.com" required>
+        </div>
+
+        <div class="form-group">
+          <label for="password">Mot de passe</label>
+          <input type="password" id="password" placeholder="••••••••" required minlength="6">
+          <div class="password-strength">Minimum 6 caractères</div>
+        </div>
+
+        <button type="submit" id="submitBtn">S'inscrire</button>
+      </form>
+
+      <div class="link-container">
+        Déjà un compte ? <a href="/static/login.html">Se connecter</a>
+      </div>
+
+      <div class="back-link">
+        <a href="/">← Retour à l'accueil</a>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const registerForm = document.getElementById("registerForm");
+    const messageDiv = document.getElementById("message");
+    const submitBtn = document.getElementById("submitBtn");
+
+    registerForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      
+      submitBtn.disabled = true;
+      submitBtn.textContent = "Création en cours...";
+
+      const data = {
+        username: document.getElementById("username").value,
+        email: document.getElementById("email").value,
+        password: document.getElementById("password").value,
+      };
+
+      try {
+        const res = await fetch("/users/register", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(data),
+        });
+
+        const result = await res.json();
+
+        if (res.ok) {
+          messageDiv.textContent = `✅ Compte créé avec succès !`;
+          messageDiv.className = "message success";
+          messageDiv.style.display = "block";
+          
+          registerForm.reset();
+          
+          setTimeout(() => {
+            window.location.href = "/static/login.html";
+          }, 1500);
+        } else {
+          messageDiv.textContent = `❌ ${result.detail}`;
+          messageDiv.className = "message error";
+          messageDiv.style.display = "block";
+          submitBtn.disabled = false;
+          submitBtn.textContent = "S'inscrire";
+        }
+      } catch (error) {
+        messageDiv.textContent = "❌ Erreur de connexion au serveur";
+        messageDiv.className = "message error";
+        messageDiv.style.display = "block";
+        submitBtn.disabled = false;
+        submitBtn.textContent = "S'inscrire";
+      }
+    });
+  </script>
 </body>
 </html>
-
 
 # ===== Fichier : /Users/martintarot/Documents/Informatique/TrueLink/TL_frontend/script.js =====
 
