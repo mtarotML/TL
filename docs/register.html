@@ -181,7 +181,7 @@
       </form>
 
       <div class="link-container">
-        Déjà un compte ? <a href="/static/login.html">Se connecter</a>
+        Déjà un compte ? <a href="/login.html">Se connecter</a>
       </div>
 
       <div class="back-link">
@@ -224,7 +224,7 @@
           registerForm.reset();
           
           setTimeout(() => {
-            window.location.href = "/static/login.html";
+            window.location.href = "/login.html";
           }, 1500);
         } else {
           messageDiv.textContent = `❌ ${result.detail}`;

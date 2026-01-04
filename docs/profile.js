@@ -4,7 +4,7 @@ let isEditing = false;
 document.addEventListener("DOMContentLoaded", async () => {
   const token = localStorage.getItem("token");
   if (!token) {
-    window.location.href = "/static/login.html";
+    window.location.href = "/login.html";
     return;
   }
 
@@ -27,7 +27,7 @@ async function loadProfile() {
 
     if (res.status === 401) {
       localStorage.removeItem("token");
-      window.location.href = "/static/login.html";
+      window.location.href = "/login.html";
       return;
     }
 
