@@ -39,7 +39,7 @@ Accessible via :
 /admin
 ```
 
-Mot de passe par défaut : `admin`  
+Mot de passe par défaut : `admin`  🥷 
 ⚠️ *À déplacer dans un `.env` pour un usage en production.*
 
 Cette page affiche une **table HTML des utilisateurs inscrits**,  
