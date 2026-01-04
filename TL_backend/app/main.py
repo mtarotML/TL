@@ -10,6 +10,7 @@ from sqlmodel import Session, select
 from fastapi.responses import HTMLResponse
 from .models import User
 from .database import engine
+from .core.config import settings
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -34,7 +35,8 @@ def read_index():
     index_file = os.path.join(frontend_path, "index.html")
     return FileResponse(index_file)
 
-ADMIN_PASSWORD = "admin"  # ⚠️ À mettre dans .env plus tard
+
+ADMIN_PASSWORD = settings.ADMIN_PASSWORD
 
 @app.get("/admin", response_class=HTMLResponse)
 def admin_login_page():
